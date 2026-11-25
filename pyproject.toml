@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "hy-repl-mcp"
+version = "0.1.0"
+description = "A FastMCP server for persistent Hy REPL sessions"
+readme = "README.md"
+requires-python = ">=3.11,<3.16"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "norci" }]
+dependencies = [
+  "fastmcp>=4.2,<5",
+  "hy>=1.3,<2",
+  "hyrule>=1.1,<2",
+  "socksio>=1.0,<2",
+]
+
+[project.scripts]
+hy-repl-mcp = "hy_repl_mcp.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/norci/hy-repl-mcp"
+Repository = "https://github.com/norci/hy-repl-mcp"
+Issues = "https://github.com/norci/hy-repl-mcp/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hy_repl_mcp"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src", "tests", "README.md", "pyproject.toml"]
