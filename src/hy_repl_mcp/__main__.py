@@ -1,4 +1,5 @@
-import hy
+# Install Hy's import hook before importing .hy submodules.
+import hy  # noqa: F401
 
 from . import server
 

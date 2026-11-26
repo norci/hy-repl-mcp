@@ -4,6 +4,7 @@
 (import pathlib)
 (import sys)
 (import tempfile)
+(import hy)
 (import fastmcp [Client])
 (import fastmcp.client.transports [StdioTransport])
 
@@ -53,12 +54,29 @@
 
 
 (defn :async check-package [environment]
+  (import hy_repl_mcp.server :as server)
   (with [workspace (tempfile.TemporaryDirectory)]
     (let [project (.joinpath (pathlib.Path workspace) "project")
-          server-directory (.joinpath (pathlib.Path workspace) "server")]
+          server-directory (.joinpath (pathlib.Path workspace) "server")
+          marker (.joinpath (pathlib.Path workspace) "venv-used")
+          make-venv-python
+          (fn [project marker]
+            (let [bin-directory (.joinpath project ".venv" "bin")
+                  python (.joinpath bin-directory "python")
+                  script (+ "#!/bin/sh\n"
+                            "printf 'used\\n' > '" (str marker) "'\n"
+                            "exec '" (str hy.sys_executable) "' \"$@\"\n")]
+              (.mkdir bin-directory :parents True)
+              (.write-text python script)
+              (.chmod python 0o755)
+              python))]
       (.mkdir project)
       (.mkdir server-directory)
       (.write-text (.joinpath project "probe_module.py") "VALUE = 42\n")
+      (assert (= (server.project-python (str project))
+                 (getattr sys "executable")))
+      (let [venv-python (make-venv-python project marker)]
+        (assert (= (server.project-python (str project)) (str venv-python))))
       (let [shadow-package (.joinpath project "hy_repl_mcp")]
         (.mkdir shadow-package)
         (.write-text (.joinpath shadow-package "__init__.py") "raise RuntimeError(\"target project shadowed hy_repl_mcp\")\n"))
@@ -82,7 +100,8 @@
           (for [[name arguments expected] cases]
             (check-result
               (await (.call-tool client name arguments :raise-on-error False))
-              expected)))))))
+              expected))
+          (assert (.is-file marker)))))))
 
 
 (defn main []

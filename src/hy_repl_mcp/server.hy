@@ -45,18 +45,51 @@
   (setv worker (terminate-worker worker)))
 
 
-(defn worker-environment [project-path]
-  (let [existing (.get os.environ "PYTHONPATH" "")
-        python-path (+ project-path (if existing (+ os.pathsep existing) ""))]
-    {#** (dict os.environ)
-     "PYTHONPATH" python-path}))
+(do
+  (defn project-venv [project-path]
+    "项目的虚拟环境目录；没有则返回 None。"
+    (let [candidate (.joinpath (pathlib.Path project-path) ".venv")]
+      (if (.is-dir candidate) candidate None)))
+
+  (defn venv-bin [venv-path]
+    (str (.joinpath venv-path (if (= os.name "nt") "Scripts" "bin"))))
+
+  (defn project-python [project-path]
+    "项目解释器；项目虚拟环境优先，否则沿用服务进程解释器。"
+    (let [venv (project-venv project-path)]
+      (if venv
+        (let [bin-path (pathlib.Path (venv-bin venv))
+              candidates (if (= os.name "nt")
+                           [(.joinpath bin-path "python.exe")
+                            (.joinpath bin-path "python")]
+                           [(.joinpath bin-path "python")
+                            (.joinpath bin-path "python3")])]
+          (str (or (next (gfor candidate candidates :if (.is-file candidate) candidate) None)
+                   (getattr sys "executable"))))
+        (getattr sys "executable"))))
+
+  (defn worker-environment [project-path]
+    (let [existing (.get os.environ "PYTHONPATH" "")
+          python-path (+ project-path (if existing (+ os.pathsep existing) ""))
+          environment (dict os.environ)
+          venv (project-venv project-path)]
+      (when venv
+        (let [bin-path (venv-bin venv)
+              current-path (.get environment "PATH" "")]
+          (.update environment {"VIRTUAL_ENV" (str venv)
+                                "PATH" (+ bin-path
+                                         (if current-path
+                                           (+ os.pathsep current-path)
+                                           ""))})))
+      (.update environment {"PYTHONPATH" python-path})
+      environment)))
 
 
 (defn launch-worker [project-path]
   (try
     (Ok
       (subprocess.Popen
-        [(getattr sys "executable") "-m" "hy" worker-path]
+        [(project-python project-path) "-m" "hy" worker-path]
         :cwd project-path
         :env (worker-environment project-path)
         :stdin subprocess.PIPE
